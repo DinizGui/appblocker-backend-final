@@ -33,4 +33,4 @@ EXPOSE 4000
 
 # Plataformas em nuvem costumam definir PORT (ex.: 8080)
 ENV PORT=4000
-CMD ["node", "dist/index.js"]
+CMD ["npm", "start"]
