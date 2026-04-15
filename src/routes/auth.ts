@@ -196,6 +196,8 @@ router.post(
 
 const appleAuthSchema = z.object({
   identityToken: z.string().min(1, "identityToken é obrigatório"),
+  email: z.string().email().optional(),
+  name: z.string().min(1).optional(),
 });
 
 const appleJwks = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
@@ -203,7 +205,7 @@ const appleJwks = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/key
 router.post(
   "/apple",
   asyncHandler(async (req, res) => {
-    const { identityToken } = appleAuthSchema.parse(req.body);
+    const { identityToken, email: emailFromClient, name: nameFromClient } = appleAuthSchema.parse(req.body);
 
     let payload: Record<string, unknown>;
     try {
@@ -218,12 +220,13 @@ router.post(
 
     const appleId = typeof payload.sub === "string" ? payload.sub : "";
     const emailRaw = typeof payload.email === "string" ? payload.email : "";
-    const email = emailRaw.trim().toLowerCase();
+    const email = (emailRaw || emailFromClient || "").trim().toLowerCase();
 
     if (!appleId) return res.status(400).json({ error: "Invalid Apple token" });
     if (!email) return res.status(400).json({ error: "Apple token missing email" });
 
     const name =
+      (nameFromClient && nameFromClient.trim()) ||
       (typeof payload.name === "string" && payload.name.trim()) ||
       email.split("@")[0] ||
       "Usuário";
