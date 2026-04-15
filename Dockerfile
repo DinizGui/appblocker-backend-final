@@ -4,6 +4,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 COPY package.json package-lock.json* ./
 # Install all deps (including dev) so we can build (postinstall runs prisma generate)
 RUN npm ci
@@ -22,6 +23,7 @@ ENV NODE_ENV=production
 
 # Install production deps only (avoids "Use --omit=dev" warning when using npm install --production)
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 

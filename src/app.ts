@@ -45,7 +45,30 @@ export function createApp() {
       const msg = first?.message ?? "Dados inválidos";
       return res.status(400).json({ error: msg });
     }
-    res.status(500).json({ error: "Server error" });
+
+    const isProd = process.env.NODE_ENV === "production";
+    const anyErr = err as any;
+    const code = typeof anyErr?.code === "string" ? anyErr.code : undefined; // Prisma errors often expose `code`
+    const message = err instanceof Error ? err.message : "";
+
+    // In production return a safe-but-useful error so the app can show what failed (e.g. P2021)
+    if (isProd) {
+      const details =
+        code && message
+          ? `${code}: ${message}`
+          : message
+            ? message
+            : code
+              ? code
+              : "Server error";
+      return res.status(500).json({ error: details });
+    }
+
+    // Dev: include more detail
+    return res.status(500).json({
+      error: "Server error",
+      details: code && message ? `${code}: ${message}` : message || code || String(err),
+    });
   });
 
   return app;
