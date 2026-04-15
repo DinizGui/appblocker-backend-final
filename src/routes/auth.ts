@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { OAuth2Client } from "google-auth-library";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { prisma } from "../lib/prisma.js";
 import { createToken } from "../lib/auth.js";
 import { asyncHandler } from "../lib/async.js";
@@ -166,6 +167,91 @@ router.post(
           handle,
           googleId,
           photo: picture,
+          passwordHash: null,
+          plan: "Premium (Annual)",
+          notificationsEnabled: true,
+          dailyGoalMinutes: 240,
+          language: "pt-BR",
+          timerSettings: { create: {} },
+          projects: {
+            createMany: {
+              data: [
+                { name: "Trabalho" },
+                { name: "Estudos" },
+                { name: "Pessoal" },
+                { name: "Outro" },
+              ],
+            },
+          },
+        },
+        select: userSelect,
+      });
+      user = created;
+    }
+
+    const token = createToken(user.id);
+    res.json({ token, user });
+  })
+);
+
+const appleAuthSchema = z.object({
+  identityToken: z.string().min(1, "identityToken é obrigatório"),
+});
+
+const appleJwks = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
+
+router.post(
+  "/apple",
+  asyncHandler(async (req, res) => {
+    const { identityToken } = appleAuthSchema.parse(req.body);
+
+    let payload: Record<string, unknown>;
+    try {
+      const verified = await jwtVerify(identityToken, appleJwks, {
+        issuer: "https://appleid.apple.com",
+        audience: config.appleAudience,
+      });
+      payload = verified.payload as unknown as Record<string, unknown>;
+    } catch {
+      return res.status(400).json({ error: "Invalid Apple token" });
+    }
+
+    const appleId = typeof payload.sub === "string" ? payload.sub : "";
+    const emailRaw = typeof payload.email === "string" ? payload.email : "";
+    const email = emailRaw.trim().toLowerCase();
+
+    if (!appleId) return res.status(400).json({ error: "Invalid Apple token" });
+    if (!email) return res.status(400).json({ error: "Apple token missing email" });
+
+    const name =
+      (typeof payload.name === "string" && payload.name.trim()) ||
+      email.split("@")[0] ||
+      "Usuário";
+    const handle = makeHandle(name, email);
+
+    const existing = await prisma.user.findFirst({
+      where: { OR: [{ appleId }, { email }] },
+    });
+
+    let user: { id: string; name: string; handle: string; email: string; plan: string; photo: string | null; notificationsEnabled: boolean; dailyGoalMinutes: number; language: string; createdAt: Date; updatedAt: Date };
+    if (existing) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { appleId, name, updatedAt: new Date() },
+      });
+      const updated = await prisma.user.findUnique({
+        where: { id: existing.id },
+        select: userSelect,
+      });
+      if (!updated) throw new Error("User not found after update");
+      user = updated;
+    } else {
+      const created = await prisma.user.create({
+        data: {
+          email,
+          name,
+          handle,
+          appleId,
           passwordHash: null,
           plan: "Premium (Annual)",
           notificationsEnabled: true,

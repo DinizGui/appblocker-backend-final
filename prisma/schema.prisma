@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlite"
 }
 
 
@@ -20,6 +20,7 @@ model User {
   plan                 String
   updatedAt            DateTime       @updatedAt
   googleId             String?        @unique // Google sub
+  appleId              String?        @unique // Apple sub
   photo                String?        // profile picture URL
   focusSessions        FocusSession[]
   notifications        Notification[]
